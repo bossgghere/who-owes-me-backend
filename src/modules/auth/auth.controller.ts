@@ -1,78 +1,103 @@
 import { Request, Response } from 'express';
 import { registerUser, loginUser, getUserById } from './auth.service';
 
+const isNonEmptyString = (v: unknown): v is string =>
+  typeof v === 'string' && v.trim().length > 0;
+
+const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+const getErrorMessage = (err: unknown, fallback: string) => {
+  if (err instanceof Error && err.message) return err.message;
+  return fallback;
+};
+
+const getStatusCode = (err: any, fallback: number) => {
+  const code = err?.statusCode;
+  return typeof code === 'number' ? code : fallback;
+};
+
 export const register = async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = (req.body ?? {}) as Record<string, unknown>;
 
     // Validate input
-    if (!email || !password) {
+    if (!isNonEmptyString(email) || !isNonEmptyString(password)) {
       return res.status(400).json({
         success: false,
         message: 'Email and password are required',
       });
     }
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedPassword = password.trim();
+
+    if (!isValidEmail(normalizedEmail)) {
       return res.status(400).json({
         success: false,
         message: 'Invalid email format',
       });
     }
 
-    // Validate password length
-    if (password.length < 6) {
+    if (normalizedPassword.length < 6) {
       return res.status(400).json({
         success: false,
         message: 'Password must be at least 6 characters',
       });
     }
 
-    const result = await registerUser(email, password);
+    const user = await registerUser(normalizedEmail, normalizedPassword);
 
     res.status(201).json({
       success: true,
-      data: result,
+      data: { user },
     });
   } catch (error: any) {
-    res.status(400).json({
+    res.status(getStatusCode(error, 400)).json({
       success: false,
-      message: error.message || 'Registration failed',
+      message: getErrorMessage(error, 'Registration failed'),
     });
   }
 };
 
 export const login = async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = (req.body ?? {}) as Record<string, unknown>;
 
     // Validate input
-    if (!email || !password) {
+    if (!isNonEmptyString(email) || !isNonEmptyString(password)) {
       return res.status(400).json({
         success: false,
         message: 'Email and password are required',
       });
     }
 
-    const result = await loginUser(email, password);
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedPassword = password.trim();
+
+    if (!isValidEmail(normalizedEmail)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid email format',
+      });
+    }
+
+    const result = await loginUser(normalizedEmail, normalizedPassword);
 
     res.status(200).json({
       success: true,
       data: result,
     });
   } catch (error: any) {
-    res.status(401).json({
+    res.status(getStatusCode(error, 401)).json({
       success: false,
-      message: error.message || 'Login failed',
+      message: getErrorMessage(error, 'Login failed'),
     });
   }
 };
 
 export const me = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.userId;
 
     if (!userId) {
       return res.status(401).json({
@@ -85,12 +110,12 @@ export const me = async (req: Request, res: Response) => {
 
     res.status(200).json({
       success: true,
-      data: user,
+      data: { user },
     });
   } catch (error: any) {
-    res.status(401).json({
+    res.status(getStatusCode(error, 401)).json({
       success: false,
-      message: error.message || 'Failed to get user',
+      message: getErrorMessage(error, 'Failed to get user'),
     });
   }
 };

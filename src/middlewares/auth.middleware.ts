@@ -1,10 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET;
-
-if (!JWT_SECRET) {
-  throw new Error('JWT_SECRET is not defined in environment variables');
+declare global {
+  namespace Express {
+    interface Request {
+      userId?: string;
+    }
+  }
 }
 
 export const authMiddleware = (
@@ -26,11 +28,26 @@ export const authMiddleware = (
     // Extract token
     const token = authHeader.substring(7);
 
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      return res.status(500).json({
+        success: false,
+        message: 'Server misconfigured: JWT_SECRET is missing',
+      });
+    }
+
     // Verify token
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
+    const decoded = jwt.verify(token, secret) as { userId?: string };
+
+    if (!decoded?.userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid or expired token',
+      });
+    }
 
     // Attach userId to request
-    (req as any).userId = decoded.userId;
+    req.userId = decoded.userId;
 
     next();
   } catch (error) {
